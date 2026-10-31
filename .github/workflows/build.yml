@@ -1,0 +1,113 @@
+name: Build && Push image
+
+# 本仓库不在本地构建镜像。两种触发方式：
+#   1) 本 workflow（推 GHCR，用内置 GITHUB_TOKEN，无需额外 secrets）
+#   2) 复用 selkies-base 的私有构建仓库 jcleng/action-sync-images（推阿里云 ACR），
+#      见 README「用 action-sync-images 构建」
+on:
+  workflow_dispatch:
+    inputs:
+      todesk_version:
+        description: ToDesk 版本（用于 tag，需与 TO_DESK_SHA256 对应）
+        required: false
+        default: "4.9.7.0"
+      image_tag:
+        description: 推送的镜像 tag
+        required: false
+        default: "latest"
+      todesk_deb_url:
+        description: 官方 deb 下载地址（留空则用 Dockerfile 内置的 Internet Archive 快照）
+        required: false
+        default: ""
+      todesk_sha256:
+        description: 官方 deb 的 sha256（留空则用 Dockerfile 内置值）
+        required: false
+        default: ""
+  push:
+    branches: main
+    paths:
+      - Dockerfile
+      - root/**
+      - .github/workflows/build.yml
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  BASE_IMAGE: registry.cn-hangzhou.aliyuncs.com/jcleng/gitbuild-selkies-base:latest
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 基础镜像在阿里云 ACR（境外拉取偶发慢），先带重试地拉一次，
+      # 失败时给出一条能直接照做的错误信息，而不是在 build 阶段超时。
+      - name: Pull base image (with retries)
+        run: |
+          set -euo pipefail
+          for i in 1 2 3; do
+            if docker pull "$BASE_IMAGE"; then exit 0; fi
+            echo "attempt $i failed; retrying in 20s"; sleep 20
+          done
+          echo "::error::无法拉取基础镜像 $BASE_IMAGE。请把 selkies-base 同步到别的 registry，" \
+               "然后用 build-arg BASE_IMAGE 覆盖（默认值见 Dockerfile 顶部）。"
+          exit 1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # deb 的取包与 sha256 校验都在 Dockerfile 内完成：
+      # 上下文有 vendor/*.deb 就用本地那份，否则按 TO_DESK_DEB_URL 下载。
+      # 这里只在用户显式填了输入时才覆盖默认 URL / sha256。
+      - name: Build and push
+        env:
+          IN_TO_DESK_VERSION: ${{ inputs.todesk_version }}
+          IN_IMAGE_TAG: ${{ inputs.image_tag }}
+          IN_TO_DESK_DEB_URL: ${{ inputs.todesk_deb_url }}
+          IN_TO_DESK_SHA256: ${{ inputs.todesk_sha256 }}
+        run: |
+          set -euo pipefail
+          version="${IN_TO_DESK_VERSION:-4.9.7.0}"
+          tag="${IN_IMAGE_TAG:-latest}"
+
+          args=(
+            --push
+            --tag "${IMAGE}:${tag}"
+            --tag "${IMAGE}:${version}"
+            --build-arg "TO_DESK_VERSION=${version}"
+            --build-arg "VERSION=${version}"
+            --build-arg "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            --cache-from "type=gha,scope=todesk"
+            --cache-to "type=gha,scope=todesk,mode=max"
+            --provenance=false
+          )
+          if [ -n "${IN_TO_DESK_DEB_URL}" ]; then
+            args+=(--build-arg "TO_DESK_DEB_URL=${IN_TO_DESK_DEB_URL}")
+          fi
+          if [ -n "${IN_TO_DESK_SHA256}" ]; then
+            args+=(--build-arg "TO_DESK_SHA256=${IN_TO_DESK_SHA256}")
+          fi
+
+          docker buildx build "${args[@]}" .
+
+      - name: Summary
+        run: |
+          {
+            echo "## 镜像"
+            echo ""
+            echo "- 基础镜像: \`$BASE_IMAGE\`"
+            echo "- 产物: \`${IMAGE}:${{ inputs.image_tag || 'latest' }}\`"
+            echo "- ToDesk: \`${{ inputs.todesk_version || '4.9.7.0' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

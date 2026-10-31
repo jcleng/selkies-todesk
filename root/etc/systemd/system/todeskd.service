@@ -1,0 +1,17 @@
+[Unit]
+Description=ToDesk Daemon Service
+After=network-online.target
+Before=nss-lookup.target
+Wants=network-online.target nss-lookup.target
+
+[Service]
+Environment="LIBVA_DRIVER_NAME=iHD"
+Environment="LIBVA_DRIVERS_PATH=/opt/todesk/bin"
+ExecStart=/opt/todesk/bin/ToDesk_Service
+ExecStop=/bin/kill -SIGINT $MAINPID
+Restart=on-failure
+RestartSec=3s
+User=root
+
+[Install]
+WantedBy=multi-user.target

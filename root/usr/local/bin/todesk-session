@@ -1,0 +1,49 @@
+#!/bin/bash
+# ToDesk 主控端会话启动器：由 selkies-base 的 /defaults/autostart 以
+#   exec ${APP} ${APP_CLI}
+# 调用（本项目把 APP 设为 /usr/local/bin/todesk-session）。
+#
+# 职责：
+#   1. 备好 ToDesk 必需的运行环境（官方 /usr/local/bin/todesk 里那套 + 容器适配）；
+#   2. 没有托盘时拉一个 stalonetray —— ToDesk 主窗口关闭后只缩到托盘，
+#      在网页桌面里若没有托盘就等于「窗口再也找不回来」；
+#   3. 前台 exec ToDesk，让 selkies 的会话看门狗能正常管它。
+set -u
+
+TODESK_PACK_NAME=todesk
+TODESK_PATH=/opt/${TODESK_PACK_NAME}
+TODESK_BIN_PATH=${TODESK_PATH}/bin
+
+export TODESK_PACK_NAME
+export GDK_BACKEND=x11
+export LIBVA_DRIVERS_PATH=${TODESK_BIN_PATH}
+
+# 官方 unit 与桌面入口都写死了 LIBVA_DRIVER_NAME=iHD（Intel 硬编解码驱动）。
+# 容器里通常没有 /dev/dri 渲染节点，强行指定只会让 ToDesk 刷一遍失败日志后
+# 回落软编解码。这里按实际设备决定是否指定，行为与 newyorkthink 的做法一致。
+if [ -e /dev/dri/renderD128 ] || [ -n "${LIBVA_DRIVER_NAME:-}" ]; then
+  export LIBVA_DRIVER_NAME="${LIBVA_DRIVER_NAME:-iHD}"
+fi
+
+# todeskd.service 由镜像里的 multi-user.target.wants 软链 enable，systemd 开机自起。
+# 这里只做一次有界等待，避免 GUI 抢先启动时报「服务未运行」。
+for _i in $(seq 1 15); do
+  if pgrep -x ToDesk_Service >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! pgrep -x ToDesk_Service >/dev/null 2>&1; then
+  echo "todesk-session: 警告 - ToDesk_Service 未运行；可在容器里执行 systemctl status todeskd.service 排查" >&2
+fi
+
+# 托盘：Openbox/X11 会话本身没有 system tray，ToDesk 缩到托盘后就无法再唤回。
+# 只在确实没有 stalonetray 在跑时拉一个（已在跑则 stalonetray 自己会因
+# selection owner 已存在而退出，这里先判断避免多余的失败日志）。
+if command -v stalonetray >/dev/null 2>&1 && ! pgrep -x stalonetray >/dev/null 2>&1; then
+  stalonetray --log-level=err --geometry=1x1+0+0 &
+  sleep 1
+fi
+
+# 会话退出由底包/看门狗处理，这里前台 exec，方便 Selkies 观察到应用退出。
+exec "${TODESK_BIN_PATH}/ToDesk" "$@"

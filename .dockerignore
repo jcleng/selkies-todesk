@@ -1,0 +1,9 @@
+# ToDesk 官方 deb 由 .gitignore 排除，但**不能**在这里忽略：
+# Dockerfile 的本地取包分支依赖 vendor/*.deb 进入构建上下文。
+.git
+.github/
+.gitignore
+*.md
+docs/
+config/
+*.log

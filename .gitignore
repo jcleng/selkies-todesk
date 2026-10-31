@@ -1,0 +1,9 @@
+# ToDesk 官方 deb 只用于本地构建，绝不提交（113 MB > Git 限制）。
+# vendor/.gitkeep 必须提交：Dockerfile 里 `COPY vendor /tmp/src` 依赖该目录恒存在，
+# 否则干净检出时 COPY 找不到源会让构建直接失败。
+vendor/*.deb
+vendor/*.rpm
+
+# 运行期产物
+config/
+*.log
