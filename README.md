@@ -46,7 +46,6 @@
 | `APP` | `/usr/local/bin/todesk-session` | 会话里启动的程序（ToDesk GUI） |
 | `PIXELFLUX_WAYLAND` | `false` | 强制 X11/Openbox 会话。ToDesk 是纯 X11 客户端，labwc 下只能落 XWayland |
 | `TITLE` | `ToDesk` | 浏览器标题 / PWA 名称 |
-| `TO_DESK_AS_ROOT` | 空 | 预留开关，暂无实现 |
 
 其余 Selkies 变量（`PUID`/`PGID`/`TZ`/`LC_ALL`/`CUSTOM_USER`/`PASSWORD`/`SELKIES_*`）
 与 `selkies-base` 完全相同，见其 README。
@@ -57,6 +56,9 @@
 docker run -d \
   --name selkies-todesk \
   --privileged \
+  --cgroupns=host \
+  --cap-add=SYS_ADMIN \
+  -v /sys/fs/cgroup:/sys/fs/cgroup \
   --tmpfs /run --tmpfs /tmp \
   --shm-size=1gb \
   -p 3001:3001 \
@@ -70,6 +72,24 @@ docker run -d \
   ghcr.io/jcleng/selkies-todesk:latest
 ```
 
+`--cgroupns=host` / `--cap-add=SYS_ADMIN` / `-v /sys/fs/cgroup:/sys/fs/cgroup` 这三项是
+**为容器里的 systemd** 准备的：PID 1 是 `/sbin/init`，它需要自己的 cgroup 视图（host namespace）
+才能干净地拉起/停止 `todeskd.service` 等单元。`--privileged` 已包含 `SYS_ADMIN`，但三项仍建议显式写上，
+以后去掉 `--privileged` 时不会突然失效。
+
+不用 `--privileged` 时，至少保留：
+
+```bash
+docker run -d --name selkies-todesk \
+  --cgroupns=host --cap-add=SYS_ADMIN \
+  -v /sys/fs/cgroup:/sys/fs/cgroup \
+  --tmpfs /run --tmpfs /tmp --shm-size=1gb \
+  -p 3001:3001 -v $PWD/config:/config \
+  ghcr.io/jcleng/selkies-todesk:latest
+```
+
+> 该组合下内层 Docker（底包带的 `docker.service`）不会起来，属预期。
+
 浏览器打开 `https://localhost:3001`（自签证书需接受），桌面里就是 ToDesk 窗口。
 
 ### docker-compose
@@ -80,6 +100,10 @@ services:
     image: ghcr.io/jcleng/selkies-todesk:latest
     container_name: selkies-todesk
     privileged: true
+    # 容器内 PID 1 是 systemd，需要自己的 cgroup 视图
+    cgroup: host
+    cap_add:
+      - SYS_ADMIN
     tmpfs: [/run, /tmp]
     shm_size: 1gb
     ports: ["3001:3001"]
@@ -90,6 +114,7 @@ services:
       - LC_ALL=zh_CN.UTF-8
       - TITLE=ToDesk
     volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
       - ./config:/config
       - todesk-config:/opt/todesk/config
       - todesk-etc:/etc/todesk
@@ -138,7 +163,6 @@ ToDesk 把「设备已登录 / 设备码 / 设置」写在容器内的固定路�
 镜像不由本地构建。四件事都已在仓库内自洽：取包、校验、解包、enable 软链。
 
 ### 方式一：本仓库 workflow（推 GHCR）
-
 ```bash
 gh workflow run build.yml --repo jcleng/selkies-todesk -f image_tag=latest
 gh run list  --repo jcleng/selkies-todesk --workflow build.yml --limit 3
@@ -164,6 +188,14 @@ gh workflow run build-repo.yml --repo jcleng/action-sync-images \
 产物：`registry.cn-hangzhou.aliyuncs.com/jcleng/gitbuild-selkies-todesk:latest`。
 该 workflow 会 `git clone` 本仓库后直接 `docker build`，**不传 build-arg**，
 因此它依赖 Dockerfile 里的默认取包地址（IA 快照）。
+
+## 镜像与构建记录
+
+| 时间(UTC) | Run ID | 结果 | 产物 |
+| --- | --- | --- | --- |
+| 2026-10-31T06:28Z | [`41176746928`](https://github.com/jcleng/selkies-todesk/actions/runs/41176746928) | success（7m21s） | `ghcr.io/jcleng/selkies-todesk:latest` / `:4.9.7.0`<br>digest `sha256:d1b15494bdbcbcbe0aa7a98ccaeb3aacff73b199ca10d09b25ed18ac376bcb70`<br>（基础镜像 digest `sha256:98f0b70470784216d8aef581f2e6fd8bc683cf036e0353c68b855032bde4a1c7`，ToDesk 4.9.7.0 sha256 校验 `OK`） |
+
+当前未做容器运行验证（由使用者手动验证）。
 
 ## 排障
 
