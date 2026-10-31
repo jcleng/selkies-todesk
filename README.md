@@ -1,7 +1,12 @@
 # selkies-todesk
 
+[![release](https://img.shields.io/github/v/release/jcleng/selkies-todesk?label=release)](https://github.com/jcleng/selkies-todesk/releases)
+[![build](https://github.com/jcleng/selkies-todesk/actions/workflows/build.yml/badge.svg)](https://github.com/jcleng/selkies-todesk/actions/workflows/build.yml)
+
 把 **ToDesk Linux 客户端包进 Selkies 网页桌面**，作为**主控端**使用：
 浏览器里打开 Selkies，操作里面的 ToDesk 窗口，去连接/控制别的机器。
+
+当前发布版本：[**v1.0.0**](https://github.com/jcleng/selkies-todesk/releases/tag/v1.0.0)（ToDesk `4.9.7.0`，已验证可运行）。
 
 基础镜像用 [`jcleng/selkies-base`](https://github.com/jcleng/selkies-base)
 （真 `systemd` 作 PID 1 的 Selkies 环境），因此 ToDesk 官方的 `todeskd.service`
@@ -69,7 +74,7 @@ docker run -d \
   -v todesk-etc:/etc/todesk \
   -v todesk-lib:/var/lib/todesk \
   -v todesk-log:/var/log/todesk \
-  ghcr.io/jcleng/selkies-todesk:latest
+  ghcr.io/jcleng/selkies-todesk:v1.0.0
 ```
 
 `--cgroupns=host` / `--cap-add=SYS_ADMIN` / `-v /sys/fs/cgroup:/sys/fs/cgroup` 这三项是
@@ -97,7 +102,7 @@ docker run -d --name selkies-todesk \
 ```yaml
 services:
   selkies-todesk:
-    image: ghcr.io/jcleng/selkies-todesk:latest
+    image: ghcr.io/jcleng/selkies-todesk:v1.0.0
     container_name: selkies-todesk
     privileged: true
     # 容器内 PID 1 是 systemd，需要自己的 cgroup 视图
@@ -193,9 +198,11 @@ gh workflow run build-repo.yml --repo jcleng/action-sync-images \
 
 | 时间(UTC) | Run ID | 结果 | 产物 |
 | --- | --- | --- | --- |
-| 2026-10-31T06:28Z | [`41176746928`](https://github.com/jcleng/selkies-todesk/actions/runs/41176746928) | success（7m21s） | `ghcr.io/jcleng/selkies-todesk:latest` / `:4.9.7.0`<br>digest `sha256:d1b15494bdbcbcbe0aa7a98ccaeb3aacff73b199ca10d09b25ed18ac376bcb70`<br>（基础镜像 digest `sha256:98f0b70470784216d8aef581f2e6fd8bc683cf036e0353c68b855032bde4a1c7`，ToDesk 4.9.7.0 sha256 校验 `OK`） |
+| 2026-10-31T07:44Z | [`41181795843`](https://github.com/jcleng/selkies-todesk/actions/runs/41181795843) | success | **`v1.0.0`** / `:4.9.7.0`<br>manifest `sha256:ad4e15872b45c7387da3a1916a654d79699257c359342e08a6094199dd2693b5`<br>→ Release [v1.0.0](https://github.com/jcleng/selkies-todesk/releases/tag/v1.0.0) |
+| 2026-10-31T06:28Z | [`41176746928`](https://github.com/jcleng/selkies-todesk/actions/runs/41176746928) | success（7m21s） | 首次构建：`ghcr.io/jcleng/selkies-todesk:latest`<br>digest `sha256:d1b15494bdbcbcbe0aa7a98ccaeb3aacff73b199ca10d09b25ed18ac376bcb70`<br>（基础镜像 digest `sha256:98f0b70470784216d8aef581f2e6fd8bc683cf036e0353c68b855032bde4a1c7`，ToDesk 4.9.7.0 sha256 校验 `OK`） |
 
-当前未做容器运行验证（由使用者手动验证）。
+`latest` 是滚动 tag；需要可复现请固定 `:v1.0.0` 或 `:4.9.7.0`（二者同一 manifest）。
+容器运行已由维护者在本机 `docker run` 验证通过。
 
 ## 排障
 
