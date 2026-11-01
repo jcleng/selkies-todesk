@@ -6,6 +6,10 @@
 把 **ToDesk Linux 客户端包进 Selkies 网页桌面**，作为**主控端**使用：
 浏览器里打开 Selkies，操作里面的 ToDesk 窗口，去连接/控制别的机器。
 
+桌面是 **LXDE**（`--no-install-recommends` 最小组合）：底部任务栏、
+左下角开始菜单（ToDesk 也在里面）、`pcmanfm` 文件管理器、`lxterminal` 终端，
+窗口管理器仍是 `openbox`（LXDE 的标准组合），托盘由 `lxpanel` 提供。
+
 当前发布版本：[**v1.0.0**](https://github.com/jcleng/selkies-todesk/releases/tag/v1.0.0)（ToDesk `4.9.7.0`，已验证可运行）。
 
 基础镜像用 [`jcleng/selkies-base`](https://github.com/jcleng/selkies-base)
@@ -34,12 +38,15 @@
 
 ```
 .
-├── Dockerfile                 # dpkg-deb -x 解包官方 deb + 依赖 + 会话启动器
+├── Dockerfile                 # dpkg-deb -x 解包官方 deb + 依赖（含 LXDE）+ 启动器
 ├── root/                      # COPY /root / ：镜像内路径与仓库路径一一对应
+│   ├── defaults/startwm.sh                           # 覆盖底包：起 LXDE 会话（startlxde）
+│   ├── etc/xdg/lxsession/LXDE/autostart              # LXDE 启动项：lxpanel + pcmanfm + $APP
 │   ├── etc/systemd/system/todeskd.service            # 官方 unit（与 deb 内逐字节一致）
 │   ├── etc/systemd/system/multi-user.target.wants/
 │   │   └── todeskd.service -> ../todeskd.service     # enable 产物（构建期不跑 systemctl）
-│   └── usr/local/bin/todesk-session                  # $APP 入口：环境 + 托盘 + 前台 exec ToDesk
+│   ├── usr/local/bin/lxde-app                        # LXDE autostart -> $APP 中转（保留 APP/APP_CLI 语义）
+│   └── usr/local/bin/todesk-session                  # $APP 入口：环境 + 前台 exec ToDesk
 ├── vendor/.gitkeep            # 放 todesk-*.deb 可让构建走本地取包（*.deb 被 .gitignore 排除）
 └── .github/workflows/build.yml
 ```
@@ -48,9 +55,22 @@
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `APP` | `/usr/local/bin/todesk-session` | 会话里启动的程序（ToDesk GUI） |
-| `PIXELFLUX_WAYLAND` | `false` | 强制 X11/Openbox 会话。ToDesk 是纯 X11 客户端，labwc 下只能落 XWayland |
+| `APP` | `/usr/local/bin/todesk-session` | 会话里启动的程序（ToDesk GUI），由 `lxde-app` 中转到 LXDE autostart |
+| `APP_CLI` | 空 | 追加给 `APP` 的参数 |
+| `PIXELFLUX_WAYLAND` | `false` | 强制 X11/LXDE 会话。ToDesk 是纯 X11 客户端，labwc 下只能落 XWayland |
 | `TITLE` | `ToDesk` | 浏览器标题 / PWA 名称 |
+| `RESTART_APP` | 空 | **保持关闭**。底包的 watchdog 把路径写死成 openbox/labwc 的 autostart，对 LXDE 无效，开了只会空跑 |
+
+会话启动项在 `/etc/xdg/lxsession/LXDE/autostart`。若你想改桌面启动什么（例如不自动开 ToDesk），
+在容器里写一份用户级文件即可覆盖它：
+
+```bash
+# /config 是持久化的，重建容器不丢
+docker exec -it selkies-todesk bash -lc 'mkdir -p /config/.config/lxsession/LXDE && \
+  printf "@lxpanel --profile LXDE\n@pcmanfm --desktop --profile LXDE\n" \
+  > /config/.config/lxsession/LXDE/autostart'
+docker restart selkies-todesk
+```
 
 其余 Selkies 变量（`PUID`/`PGID`/`TZ`/`LC_ALL`/`CUSTOM_USER`/`PASSWORD`/`SELKIES_*`）
 与 `selkies-base` 完全相同，见其 README。
@@ -95,7 +115,8 @@ docker run -d --name selkies-todesk \
 
 > 该组合下内层 Docker（底包带的 `docker.service`）不会起来，属预期。
 
-浏览器打开 `https://localhost:3001`（自签证书需接受），桌面里就是 ToDesk 窗口。
+浏览器打开 `https://localhost:3001`（自签证书需接受）。桌面是 LXDE：
+底部任务栏 + 左下角开始菜单 + 桌面图标（家目录/回收站），ToDesk 窗口会自动起来。
 
 ### docker-compose
 
@@ -198,6 +219,8 @@ gh workflow run build-repo.yml --repo jcleng/action-sync-images \
 
 | 时间(UTC) | Run ID | 结果 | 产物 |
 | --- | --- | --- | --- |
+| 2026-11-01T03:37Z | [`41269455700`](https://github.com/jcleng/selkies-todesk/actions/runs/41269455700) | success | **`v1.1.0`** / `:4.9.7.0`<br>manifest `sha256:d1f2cbeb6b59be5815596050624f7727cbec358bbef0172d860928662903f621`<br>（LXDE 桌面版本，待运行验证） |
+| 2026-11-01T03:21Z | [`41268887326`](https://github.com/jcleng/selkies-todesk/actions/runs/41268887326) | success | 首次 LXDE 构建：`latest` / `:4.9.7.0`<br>manifest `sha256:3393f1b8d824e295cf0b7c390d0fa5c7a2eb29325334c701f1eaf5d4c3cbff60` |
 | 2026-10-31T07:44Z | [`41181795843`](https://github.com/jcleng/selkies-todesk/actions/runs/41181795843) | success | **`v1.0.0`** / `:4.9.7.0`<br>manifest `sha256:ad4e15872b45c7387da3a1916a654d79699257c359342e08a6094199dd2693b5`<br>→ Release [v1.0.0](https://github.com/jcleng/selkies-todesk/releases/tag/v1.0.0) |
 | 2026-10-31T06:28Z | [`41176746928`](https://github.com/jcleng/selkies-todesk/actions/runs/41176746928) | success（7m21s） | 首次构建：`ghcr.io/jcleng/selkies-todesk:latest`<br>digest `sha256:d1b15494bdbcbcbe0aa7a98ccaeb3aacff73b199ca10d09b25ed18ac376bcb70`<br>（基础镜像 digest `sha256:98f0b70470784216d8aef581f2e6fd8bc683cf036e0353c68b855032bde4a1c7`，ToDesk 4.9.7.0 sha256 校验 `OK`） |
 
@@ -220,9 +243,9 @@ docker exec -it selkies-todesk bash -lc \
    [ -f /opt/todesk/config/config.ini ] && mv /opt/todesk/config/config.ini /opt/todesk/config/config.ini.bak; \
    systemctl start todeskd.service'
 
-# 会话/应用是否起来了
+# 会话/应用是否起来了（LXDE：lxsession + lxpanel + pcmanfm + ToDesk）
 docker exec -it selkies-todesk systemctl list-units --failed
-docker exec -it selkies-todesk pgrep -a -f 'ToDesk|stalonetray'
+docker exec -it selkies-todesk pgrep -a -f 'ToDesk|lxsession|lxpanel|pcmanfm'
 ```
 
 常见症状：
@@ -231,7 +254,9 @@ docker exec -it selkies-todesk pgrep -a -f 'ToDesk|stalonetray'
 | --- | --- |
 | 网页桌面黑屏、只有鼠标 | 会话被切到 Wayland。确认 `PIXELFLUX_WAYLAND=false` |
 | ToDesk 窗口起来但提示「服务未启动」 | `todeskd.service` 没跑；看上面 `systemctl status` |
-| 关掉窗口后找不回来 | ToDesk 缩到了托盘。镜像内已装 `stalonetray`；若仍无，`docker exec ... pgrep -a stalonetray` |
+| 关掉窗口后找不回来 | ToDesk 缩到了托盘。现在托盘由 `lxpanel` 的 system tray 插件提供，看任务栏右侧；若面板没起来，`docker exec ... pgrep -a lxpanel` |
+| 桌面只有壁纸，没任务栏/开始菜单 | `lxpanel` 没起（`pgrep -a lxpanel`）。看 `/config/.local/share/xorg` 或 `journalctl -u selkies-de` 里 `startlxde` 的报错；也可能是 `/config/.config/lxsession/LXDE/autostart` 被改坏了（删掉该文件重启即可回退到镜像内置项） |
+| 开始菜单里找不到 ToDesk | 桌面数据库缓存未刷新：`docker exec ... update-desktop-database /usr/share/applications`，再重启会话 |
 | 日志刷 `can't open /dev/dri/renderD128` | 容器无 Intel 渲染节点，`todesk-session` 已不再强设 `iHD`；`todeskd.service` 里仍保留官方的 `LIBVA_DRIVER_NAME=iHD`，可加 drop-in 覆盖 |
 | 视频卡 | 双重编码；调 Selkies 的 `SELKIES_*` 编码参数，或降低 ToDesk 画质 |
 | 没有声音 | 主控端一般不需要；Selkies 的 PulseAudio 与 ToDesk 的 `libpulse` 已装 |
@@ -244,7 +269,16 @@ docker exec -it selkies-todesk pgrep -a -f 'ToDesk|stalonetray'
 - **enable 用仓库自带的 `multi-user.target.wants` 软链**，不在构建期 `systemctl enable`，
   与 `selkies-base` 的约定一致。
 - **`todeskd.service` 逐字节照抄官方 deb**（已 `diff` 验证），只把它纳入版本控制便于 review。
-- **托盘用 `stalonetray`**：Openbox/X11 会话没有 system tray，而 ToDesk 的「关闭」= 缩到托盘。
+- **桌面用 LXDE（`--no-install-recommends`）**：底包默认只起裸 `openbox-session` ——
+  一个没有任务栏、没有开始菜单、没有文件管理器的空桌面，ToDesk 缩到托盘后就找不回来了。
+  换成 `lxde-core` 后：`lxpanel`（任务栏 + 开始菜单 + system tray）、`pcmanfm`（桌面/文件管理）、
+  `lxterminal`（终端），而 `openbox` **仍然是窗口管理器**（`desktop.conf` 里
+  `window_manager=openbox-lxde`）—— 这就是 LXDE 的标准构成，不是把 openbox 删掉。
+  依赖体积：相对裸 openbox 只多 38 个小包（无 GNOME/KDE 库，无 `xscreensaver`），
+  而不是 `lxde`／`task-lxde-desktop` 那种把办公套件也拖进来的大礼包。
+- **去掉 `stalonetray`**：`lxpanel` 自带 system tray，再拉一个托盘守护进程是重复的。
+- **`RESTART_APP` 保持关闭**：底包 watchdog 把监视路径写死为
+  `~/.config/openbox/autostart`，在 LXDE 下该文件不参与启动；开了只会每秒空跑。
 - **不强制 `LIBVA_DRIVER_NAME=iHD`**：容器里通常没有 `/dev/dri/renderD128`，
   强行指定只会刷一遍失败日志再回落软编解码。
 
