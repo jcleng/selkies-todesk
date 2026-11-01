@@ -46,7 +46,8 @@
 │   ├── etc/systemd/system/multi-user.target.wants/
 │   │   └── todeskd.service -> ../todeskd.service     # enable 产物（构建期不跑 systemctl）
 │   ├── usr/local/bin/lxde-app                        # LXDE autostart -> $APP 中转（保留 APP/APP_CLI 语义）
-│   └── usr/local/bin/todesk-session                  # $APP 入口：环境 + 前台 exec ToDesk
+│   ├── usr/local/bin/todesk-raise                    # 把缩进托盘的 ToDesk 主窗口拉出来
+│   └── usr/local/bin/todesk-session                  # $APP 入口：环境 + 后台 todesk-raise + 前台 exec ToDesk
 ├── vendor/.gitkeep            # 放 todesk-*.deb 可让构建走本地取包（*.deb 被 .gitignore 排除）
 └── .github/workflows/build.yml
 ```
@@ -86,15 +87,9 @@ docker run -d \
   -v /sys/fs/cgroup:/sys/fs/cgroup \
   --tmpfs /run --tmpfs /tmp \
   --shm-size=1gb \
-  -p 3001:3001 \
-  -e PUID=1000 -e PGID=1000 \
+  -p 3098:3001 \
   -e TZ=Asia/Shanghai -e LC_ALL=zh_CN.UTF-8 \
-  -v $PWD/config:/config \
-  -v todesk-config:/opt/todesk/config \
-  -v todesk-etc:/etc/todesk \
-  -v todesk-lib:/var/lib/todesk \
-  -v todesk-log:/var/log/todesk \
-  ghcr.io/jcleng/selkies-todesk:v1.0.0
+  registry.cn-hangzhou.aliyuncs.com/jcleng/gitbuild-selkies-todesk
 ```
 
 `--cgroupns=host` / `--cap-add=SYS_ADMIN` / `-v /sys/fs/cgroup:/sys/fs/cgroup` 这三项是
@@ -188,18 +183,10 @@ ToDesk 把「设备已登录 / 设备码 / 设置」写在容器内的固定路�
 
 镜像不由本地构建。四件事都已在仓库内自洽：取包、校验、解包、enable 软链。
 
-### 方式一：本仓库 workflow（推 GHCR）
-```bash
-gh workflow run build.yml --repo jcleng/selkies-todesk -f image_tag=latest
-gh run list  --repo jcleng/selkies-todesk --workflow build.yml --limit 3
-gh run watch <run-id> --repo jcleng/selkies-todesk
-```
+### 方式一（推荐）：复用 action-sync-images，推阿里云 ACR
 
-推送 `Dockerfile` / `root/**` 到 `main` 也会自动触发。产物：`ghcr.io/jcleng/selkies-todesk:latest`。
-
-### 方式二：复用 selkies-base 的私有构建仓库（推阿里云 ACR）
-
-与 `selkies-base` 同一套流程（`jcleng/action-sync-images` 的 `build-repo.yml`）：
+与 `selkies-base` 同一套流程（`jcleng/action-sync-images` 的 `build-repo.yml`）。
+国内拉 ACR 比 GHCR 快很多，**日常构建走这条**：
 
 ```bash
 gh workflow run build-repo.yml --repo jcleng/action-sync-images \
@@ -214,6 +201,18 @@ gh workflow run build-repo.yml --repo jcleng/action-sync-images \
 产物：`registry.cn-hangzhou.aliyuncs.com/jcleng/gitbuild-selkies-todesk:latest`。
 该 workflow 会 `git clone` 本仓库后直接 `docker build`，**不传 build-arg**，
 因此它依赖 Dockerfile 里的默认取包地址（IA 快照）。
+
+### 方式二：本仓库 workflow（推 GHCR）
+
+推送 `Dockerfile` / `root/**` 到 `main` 会自动触发；也可手动带上 tag：
+
+```bash
+gh workflow run build.yml --repo jcleng/selkies-todesk -f image_tag=latest
+gh run list  --repo jcleng/selkies-todesk --workflow build.yml --limit 3
+gh run watch <run-id> --repo jcleng/selkies-todesk
+```
+
+产物：`ghcr.io/jcleng/selkies-todesk:latest`。
 
 ## 镜像与构建记录
 
@@ -254,7 +253,9 @@ docker exec -it selkies-todesk pgrep -a -f 'ToDesk|lxsession|lxpanel|pcmanfm'
 | --- | --- |
 | 网页桌面黑屏、只有鼠标 | 会话被切到 Wayland。确认 `PIXELFLUX_WAYLAND=false` |
 | ToDesk 窗口起来但提示「服务未启动」 | `todeskd.service` 没跑；看上面 `systemctl status` |
-| 关掉窗口后找不回来 | ToDesk 缩到了托盘。现在托盘由 `lxpanel` 的 system tray 插件提供，看任务栏右侧；若面板没起来，`docker exec ... pgrep -a lxpanel` |
+| 关掉窗口后找不回来 | ToDesk 缩到了托盘。托盘由 `lxpanel` 的 system tray 插件提供，看任务栏右侧 |
+| ToDesk 一启动就是最小化的 / 点一下就缩 | ToDesk 发现托盘可用后会把自己缩进托盘。`todesk-session` 已后台跑 `todesk-raise` 把它拉出来；若仍缩，`docker exec -u abc -e DISPLAY=:1 selkies-todesk /usr/local/bin/todesk-raise`，日志在 `/config/.local/share/todesk-raise.log` |
+| 点任务栏上已激活的 ToDesk 按钮会缩回去 | 这是 taskbar 的正常语义（点已激活窗口 = 最小化），不是 bug |
 | 桌面只有壁纸，没任务栏/开始菜单 | `lxpanel` 没起（`pgrep -a lxpanel`）。看 `/config/.local/share/xorg` 或 `journalctl -u selkies-de` 里 `startlxde` 的报错；也可能是 `/config/.config/lxsession/LXDE/autostart` 被改坏了（删掉该文件重启即可回退到镜像内置项） |
 | 开始菜单里找不到 ToDesk | 桌面数据库缓存未刷新：`docker exec ... update-desktop-database /usr/share/applications`，再重启会话 |
 | 日志刷 `can't open /dev/dri/renderD128` | 容器无 Intel 渲染节点，`todesk-session` 已不再强设 `iHD`；`todeskd.service` 里仍保留官方的 `LIBVA_DRIVER_NAME=iHD`，可加 drop-in 覆盖 |
@@ -277,6 +278,10 @@ docker exec -it selkies-todesk pgrep -a -f 'ToDesk|lxsession|lxpanel|pcmanfm'
   依赖体积：相对裸 openbox 只多 38 个小包（无 GNOME/KDE 库，无 `xscreensaver`），
   而不是 `lxde`／`task-lxde-desktop` 那种把办公套件也拖进来的大礼包。
 - **去掉 `stalonetray`**：`lxpanel` 自带 system tray，再拉一个托盘守护进程是重复的。
+- **`todesk-raise` 的存在理由**：托盘一旦可用，ToDesk 被会话自动启动后会
+  把自己缩进托盘（`WM_STATE=Iconic`）。在本地桌面上这是“开机自启后不挡事”，
+  在网页桌面里却等于“打开就看不见”。所以启动后主动 `windowactivate` 把主窗口拉出来；
+  实测拉出一次后会稳定保持 `Normal`，不会反复缩。
 - **`RESTART_APP` 保持关闭**：底包 watchdog 把监视路径写死为
   `~/.config/openbox/autostart`，在 LXDE 下该文件不参与启动；开了只会每秒空跑。
 - **不强制 `LIBVA_DRIVER_NAME=iHD`**：容器里通常没有 `/dev/dri/renderD128`，

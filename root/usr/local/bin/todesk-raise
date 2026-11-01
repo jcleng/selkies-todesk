@@ -1,0 +1,50 @@
+#!/bin/bash
+# 把 ToDesk 主窗口从「最小化/托盘」状态拉出来。
+#
+# 背景：ToDesk 客户端一旦发现系统托盘可用（LXDE 里由 lxpanel 的 tray 插件提供），
+# 就会在被会话自动启动后把自己最小化到托盘（WM_STATE=Iconic / _NET_WM_STATE_HIDDEN）。
+# 在网页桌面里这表现为「ToDesk 一直是最小化的」，而 lxpanel 任务栏的语义是
+# 「点已激活的窗口 = 最小化」，于是点一下就缩回去，看起来像是自动最小化。
+#
+# 这里轮询 _NET_CLIENT_LIST，把 WM_CLASS 含 ToDesk 且处于 Iconic 的顶层窗口激活。
+# 实测：激活一次之后 ToDesk 会稳定保持 Normal，不会反复缩回去。
+#
+# 依赖 xdotool / xprop（底包自带；缺失时静默跳过，不影响会话启动）。
+# 日志写到 /config/.local/share/todesk-raise.log（/config 已持久化）。
+set -u
+
+LOG="${HOME:-/config}/.local/share/todesk-raise.log"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
+log() { echo "$(date '+%F %T') $*" >>"$LOG" 2>/dev/null || true; }
+
+command -v xdotool >/dev/null 2>&1 || { log "缺少 xdotool，跳过"; exit 0; }
+command -v xprop  >/dev/null 2>&1 || { log "缺少 xprop，跳过";  exit 0; }
+
+# 最多等 30 秒（60 x 0.5s）：ToDesk 冷启动到出窗口通常 2-10 秒
+for _ in $(seq 1 60); do
+  seen=0
+  raised=0
+  for w in $(xprop -root _NET_CLIENT_LIST 2>/dev/null \
+               | sed 's/.*# //' | tr ',' '\n' | tr -d ' '); do
+    case "$w" in 0x*) ;; *) continue ;; esac
+    xprop -id "$w" WM_CLASS 2>/dev/null | grep -q '"ToDesk"' || continue
+    seen=1
+    if xprop -id "$w" WM_STATE 2>/dev/null | grep -q Iconic; then
+      xdotool windowactivate "$w" 2>/dev/null && raised=1
+    fi
+  done
+
+  if [ "$raised" = 1 ]; then
+    log "已从托盘/最小化状态拉出 ToDesk 主窗口"
+    exit 0
+  fi
+  if [ "$seen" = 1 ]; then
+    # 窗口已经正常显示，不用等（早退，避免空转 30 秒）
+    log "ToDesk 窗口已正常显示，无需处理"
+    exit 0
+  fi
+  sleep 0.5
+done
+
+log "30 秒内没等到 ToDesk 窗口（GUI 可能没起来）"
+exit 0

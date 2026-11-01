@@ -124,7 +124,7 @@ COPY /root /
 
 # make helper scripts executable regardless of checkout file modes,
 # and refresh the .desktop database so ToDesk shows up in the lxpanel menu
-RUN chmod +x /usr/local/bin/todesk-session /usr/local/bin/lxde-app /defaults/startwm.sh && \
+RUN chmod +x /usr/local/bin/todesk-session /usr/local/bin/lxde-app /usr/local/bin/todesk-raise /defaults/startwm.sh && \
     update-desktop-database /usr/share/applications || true
 
 # ports and volumes（继承 selkies-base 的 3001；ToDesk 主控端全部出站连接, 无需额外端口）

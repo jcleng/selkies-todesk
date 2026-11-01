@@ -40,5 +40,10 @@ fi
 # 托盘：LXDE 的 lxpanel 自带 system tray 插件，ToDesk 缩到托盘后可从任务栏找回，
 # 因此这里不再（也不需要）拉起 stalonetray。
 
+# ToDesk 一旦发现系统托盘可用（LXDE 里 lxpanel 的 tray 插件），被会话自动启动后
+# 会把自己缩进托盘（WM_STATE=Iconic）。网页桌面里这看起来就是「窗口一直最小化」。
+# 后台等主窗口出现后把它拉出来；实测激活一次后会稳定保持 Normal。
+/usr/local/bin/todesk-raise &
+
 # 会话退出由底包/看门狗处理，这里前台 exec，方便 Selkies 观察到应用退出。
 exec "${TODESK_BIN_PATH}/ToDesk" "$@"
