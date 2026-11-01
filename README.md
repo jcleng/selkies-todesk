@@ -10,7 +10,7 @@
 左下角开始菜单（ToDesk 也在里面）、`pcmanfm` 文件管理器、`lxterminal` 终端，
 窗口管理器仍是 `openbox`（LXDE 的标准组合），托盘由 `lxpanel` 提供。
 
-当前发布版本：[**v1.0.0**](https://github.com/jcleng/selkies-todesk/releases/tag/v1.0.0)（ToDesk `4.9.7.0`，已验证可运行）。
+当前发布版本：[**v1.1.0**](https://github.com/jcleng/selkies-todesk/releases/tag/v1.1.0)（ToDesk `4.9.7.0`，LXDE 桌面，已验证可运行）。
 
 基础镜像用 [`jcleng/selkies-base`](https://github.com/jcleng/selkies-base)
 （真 `systemd` 作 PID 1 的 Selkies 环境），因此 ToDesk 官方的 `todeskd.service`
@@ -218,6 +218,7 @@ gh run watch <run-id> --repo jcleng/selkies-todesk
 
 | 时间(UTC) | Run ID | 结果 | 产物 |
 | --- | --- | --- | --- |
+| 2026-11-01T05:49Z | [`41278385162`](https://github.com/jcleng/selkies-todesk/actions/runs/41278385162) | success | **`v1.1.0`** / `:4.9.7.0`（含 LXDE + `todesk-raise` + 移除 `lxpolkit`）<br>manifest `sha256:fe1c2043db549ed6943a0f2068f74685d294ce90ff1b6c37e3f4805f8ca45b97`<br>→ Release [v1.1.0](https://github.com/jcleng/selkies-todesk/releases/tag/v1.1.0)<br>ACR 同内容：`gitbuild-selkies-todesk:latest` `sha256:7d1a85910747dafba151f0e84a920463008fec51fc77d13194faed475d0d37f4` |
 | 2026-11-01T03:37Z | [`41269455700`](https://github.com/jcleng/selkies-todesk/actions/runs/41269455700) | success | **`v1.1.0`** / `:4.9.7.0`<br>manifest `sha256:d1f2cbeb6b59be5815596050624f7727cbec358bbef0172d860928662903f621`<br>（LXDE 桌面版本，待运行验证） |
 | 2026-11-01T03:21Z | [`41268887326`](https://github.com/jcleng/selkies-todesk/actions/runs/41268887326) | success | 首次 LXDE 构建：`latest` / `:4.9.7.0`<br>manifest `sha256:3393f1b8d824e295cf0b7c390d0fa5c7a2eb29325334c701f1eaf5d4c3cbff60` |
 | 2026-10-31T07:44Z | [`41181795843`](https://github.com/jcleng/selkies-todesk/actions/runs/41181795843) | success | **`v1.0.0`** / `:4.9.7.0`<br>manifest `sha256:ad4e15872b45c7387da3a1916a654d79699257c359342e08a6094199dd2693b5`<br>→ Release [v1.0.0](https://github.com/jcleng/selkies-todesk/releases/tag/v1.0.0) |
