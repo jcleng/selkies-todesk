@@ -41,7 +41,9 @@ ARG TO_DESK_SHA256=e6aee6f7fecd67a9bcec00b763afa2e2b663c5b9b9375db9d60a9081c09ac
 
 # ---- session ---------------------------------------------------------------
 # ToDesk 是纯 X11 客户端（包装脚本里写死 GDK_BACKEND=x11）。labwc/Wayland 会话下
-# 它只能落在 XWayland 里，托盘与全局快捷键不可靠，因此本项目强制回退 Openbox/X11。
+# 它只能落在 XWayland 里，托盘与全局快捷键不可靠，因此本项目强制回退 X11。
+# X11 会话里跑的是 LXDE 桌面（lxpanel 任务栏/开始菜单 + pcmanfm 文件管理器 +
+# openbox 窗口管理器），不再是一层裸 openbox —— 见 root/defaults/startwm.sh。
 # APP 指向本镜像的启动器，参数仍可用 APP_CLI 追加。
 ENV TITLE=ToDesk \
     APP=/usr/local/bin/todesk-session \
@@ -74,8 +76,12 @@ RUN \
   DEPS="$DEPS libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libatk1.0-0 libatk-bridge2.0-0" && \
   DEPS="$DEPS libcups2 libdrm2 libudev1 libsystemd0 libkmod2 libglib2.0-0 libfontconfig1" && \
   DEPS="$DEPS libdbus-1-3 libatomic1 libstdc++6" && \
-  DEPS="$DEPS stalonetray xdg-utils desktop-file-utils" && \
+  DEPS="$DEPS xdg-utils desktop-file-utils" && \
   DEPS="$DEPS fonts-wqy-zenhei fonts-wqy-microhei fonts-noto-cjk" && \
+  echo "**** LXDE: lxde-core --no-install-recommends + lxterminal + 图标主题 ****" && \
+  echo "     (trixie 的 lxde-core 依赖虚拟包 lxde-session, 唯一提供者 openbox-lxde-session:" && \
+  echo "      lxpanel + pcmanfm + lxsession + lxde-common + openbox, 都是最小组合)" && \
+  DEPS="$DEPS lxde-core lxterminal lxde-icon-theme" && \
   echo "**** install packages: $DEPS ****" && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $DEPS && \
   echo "**** fetch ToDesk deb (官方原包, 校验 sha256) ****" && \
@@ -113,11 +119,13 @@ RUN \
     /var/tmp/* \
     /tmp/*
 
-# add local files (todeskd unit + enable 产物 + 会话启动器)
+# add local files (todeskd unit + enable 产物 + LXDE 会话 + 启动器)
 COPY /root /
 
-# make helper scripts executable regardless of checkout file modes
-RUN chmod +x /usr/local/bin/todesk-session
+# make helper scripts executable regardless of checkout file modes,
+# and refresh the .desktop database so ToDesk shows up in the lxpanel menu
+RUN chmod +x /usr/local/bin/todesk-session /usr/local/bin/lxde-app /defaults/startwm.sh && \
+    update-desktop-database /usr/share/applications || true
 
 # ports and volumes（继承 selkies-base 的 3001；ToDesk 主控端全部出站连接, 无需额外端口）
 EXPOSE 3001

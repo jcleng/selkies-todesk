@@ -1,0 +1,13 @@
+#!/bin/bash
+# LXDE autostart 里的会话应用中转：把 selkies 的 $APP / $APP_CLI 语义
+# （原本由 /defaults/autostart 承担）接到 LXDE 桌面上。
+#
+#   APP     默认 /usr/local/bin/todesk-session
+#   APP_CLI 追加参数，例如 -e APP_CLI="--minimized"
+#
+# 前台 exec，这样 lxsession 能观察到应用退出并记录日志。
+set -u
+
+APP="${APP:-/usr/local/bin/todesk-session}"
+# shellcheck disable=SC2086  # APP_CLI 需要按空格拆成多个参数
+exec ${APP} ${APP_CLI:-}

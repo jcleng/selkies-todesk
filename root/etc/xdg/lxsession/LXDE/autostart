@@ -1,0 +1,10 @@
+# LXDE 会话启动项（系统级，用户级 ~/.config/lxsession/LXDE/autostart 存在时会被其覆盖）。
+#
+# 与 Debian 原版（openbox-lxde-session 提供的）相比：
+#   - 保留 lxpanel（任务栏 + 开始菜单 + system tray）与 pcmanfm（桌面图标 + 文件管理器）；
+#   - 去掉 xscreensaver：--no-install-recommends 没装它，而且远程桌面里自动锁屏
+#     等于把自己锁在门外；
+#   - 换成 $APP（默认 ToDesk），见 /usr/local/bin/lxde-app。
+@lxpanel --profile LXDE
+@pcmanfm --desktop --profile LXDE
+@/usr/local/bin/lxde-app
