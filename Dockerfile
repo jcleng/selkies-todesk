@@ -84,6 +84,12 @@ RUN \
   DEPS="$DEPS lxde-core lxterminal lxde-icon-theme" && \
   echo "**** install packages: $DEPS ****" && \
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $DEPS && \
+  echo "**** 移除 polkit 认证代理 lxpolkit ****" && \
+  echo "     容器里的桌面进程不属于任何 logind session (loginctl 列表为空), polkit 注册 agent 时" && \
+  echo "     无法把 PID 映射到 session, 会报 'no session for pid NNNN' 并弹错误窗口;" && \
+  echo "     而容器内也没有需要 polkit 授权的场景(无 udisks2 挂载, 关机走 systemd), 因此直接移除" && \
+  echo "     (注意: polkit/command 是 lxsession 首次运行写进 /config 的, 改镜像默认值无效, 只能动二进制)" && \
+  rm -f /usr/bin/lxpolkit && \
   echo "**** fetch ToDesk deb (官方原包, 校验 sha256) ****" && \
   if ls /tmp/src/todesk-*.deb >/dev/null 2>&1; then \
       cp "$(ls -1 /tmp/src/todesk-*.deb | head -1)" /tmp/todesk.deb && \

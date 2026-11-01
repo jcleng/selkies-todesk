@@ -256,6 +256,7 @@ docker exec -it selkies-todesk pgrep -a -f 'ToDesk|lxsession|lxpanel|pcmanfm'
 | 关掉窗口后找不回来 | ToDesk 缩到了托盘。托盘由 `lxpanel` 的 system tray 插件提供，看任务栏右侧 |
 | ToDesk 一启动就是最小化的 / 点一下就缩 | ToDesk 发现托盘可用后会把自己缩进托盘。`todesk-session` 已后台跑 `todesk-raise` 把它拉出来；若仍缩，`docker exec -u abc -e DISPLAY=:1 selkies-todesk /usr/local/bin/todesk-raise`，日志在 `/config/.local/share/todesk-raise.log` |
 | 点任务栏上已激活的 ToDesk 按钮会缩回去 | 这是 taskbar 的正常语义（点已激活窗口 = 最小化），不是 bug |
+| 弹出 `no session for pid NNNN` 的错误窗口 | lxsession 拉起的 polkit 认证代理 `lxpolkit`。容器里的桌面进程不属于任何 logind session（`loginctl list-sessions` 为空），polkit 无法把 agent 的 PID 映射到 session。镜像已移除 `/usr/bin/lxpolkit`；旧镜像可先 `docker exec selkies-todesk pkill -x lxpolkit` 让弹窗消失 |
 | 桌面只有壁纸，没任务栏/开始菜单 | `lxpanel` 没起（`pgrep -a lxpanel`）。看 `/config/.local/share/xorg` 或 `journalctl -u selkies-de` 里 `startlxde` 的报错；也可能是 `/config/.config/lxsession/LXDE/autostart` 被改坏了（删掉该文件重启即可回退到镜像内置项） |
 | 开始菜单里找不到 ToDesk | 桌面数据库缓存未刷新：`docker exec ... update-desktop-database /usr/share/applications`，再重启会话 |
 | 日志刷 `can't open /dev/dri/renderD128` | 容器无 Intel 渲染节点，`todesk-session` 已不再强设 `iHD`；`todeskd.service` 里仍保留官方的 `LIBVA_DRIVER_NAME=iHD`，可加 drop-in 覆盖 |
@@ -278,6 +279,12 @@ docker exec -it selkies-todesk pgrep -a -f 'ToDesk|lxsession|lxpanel|pcmanfm'
   依赖体积：相对裸 openbox 只多 38 个小包（无 GNOME/KDE 库，无 `xscreensaver`），
   而不是 `lxde`／`task-lxde-desktop` 那种把办公套件也拖进来的大礼包。
 - **去掉 `stalonetray`**：`lxpanel` 自带 system tray，再拉一个托盘守护进程是重复的。
+- **移除 `lxpolkit`**：lxsession 会把它当 polkit 认证代理拉起来，但容器里的桌面进程没有
+  logind session（`loginctl list-sessions` 为空），polkit 注册 agent 时无法完成
+  PID→session 映射，于是报 `no session for pid NNNN` 并弹出错误窗口。容器内又没有
+  需要 polkit 授权的场景（没装 udisks2 做挂载，关机走 systemd），所以直接删掉二进制。
+  注意 `polkit/command=lxpolkit` 是 lxsession 首次运行写进 `/config/.config/lxsession/LXDE/desktop.conf`
+  的，改镜像里的 `/etc/xdg` 默认值无效，只能动 `/usr/bin/lxpolkit`。
 - **`todesk-raise` 的存在理由**：托盘一旦可用，ToDesk 被会话自动启动后会
   把自己缩进托盘（`WM_STATE=Iconic`）。在本地桌面上这是“开机自启后不挡事”，
   在网页桌面里却等于“打开就看不见”。所以启动后主动 `windowactivate` 把主窗口拉出来；
